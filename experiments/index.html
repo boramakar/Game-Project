@@ -1,0 +1,208 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+<meta charset="utf-8">;
+<title>THREE.JS EXPERIMENTS</title>
+ 
+<style>
+body
+{
+background-color: #000000;
+margin: 0px;
+}
+</style>
+
+<!--SCRIPTS FOR THREE.JS UTILITY-->
+<script src="../build/Three.js"></script>
+<script src="../examples/js/libs/stats.min.js"></script>
+<!--SCRIPT AREA END-->
+</head>
+<body>
+<div id="container"></div>
+<script>
+	
+	var camera, scene, renderer;
+	var geometry, material, mesh;
+	var container, stats;
+	var timer;
+	
+	timer = Date()*0.0001;
+	
+	init();
+	animate();
+	
+	function init() {
+		//DEFAULTS
+		{
+			container = document.createElement('div');
+			document.body.appendChild(container);
+			
+			//Scene and Camera
+			scene = new THREE.Scene();
+			
+			camera = new THREE.PerspectiveCamera( 65, window.innerWidth / window.innerHeight, 1, 10000 );
+			camera.position.z = 1000;
+			camera.position.y = 0;
+			camera.rotation.order = 'YXZ';
+			
+			//Renderer
+			renderer = new THREE.WebGLRenderer();
+			renderer.setPixelRatio( window.devicePixelRatio );
+			renderer.setSize( window.innerWidth, window.innerHeight );
+			document.body.appendChild( renderer.domElement );
+
+			//Stats
+			stats = new Stats();
+			stats.domElement.style.position = 'absolute';
+			stats.domElement.style.top = '0px';
+			stats.domElement.style.zIndex = 100;
+			container.appendChild( stats.domElement );
+			
+			//Window resize Listener
+			window.addEventListener( 'resize', onWindowResize, false );
+		}
+		
+		//CAMERA MOVEMENT
+		{
+			window.addEventListener("keydown", checkKey, false);
+			function checkKey(e){
+				var x = e.keyCode || e.which;
+				console.log(e);
+				switch (x){
+				case 37: //Left
+					cam_Y = 0.05;
+					e.preventDefault();
+					break;
+				case 38: //Down
+					mov_Y = 20;
+					e.preventDefault();
+					break;
+				case 39: //Right
+					cam_Y = -0.05;
+					e.preventDefault();
+					break;
+				case 40: //Up
+					mov_Y = -20;
+					e.preventDefault();
+					break;
+				case 65: //A
+					mov_X = -20; 
+					break;
+				case 68: //D
+					mov_X = 20;
+					break;
+				case 83: //S
+					mov_Z = 20;
+					break;
+				case 87: //W
+					mov_Z = -20;
+					break;
+				case 32: //Space
+					jump = true;
+					}
+			}
+			window.addEventListener("keyup", checkUp, false);
+			function checkUp(e){
+				var x = e.keyCode || e.which;
+				console.log(e);
+				switch (x){
+				case 37: //Left
+					cam_Y = 0;
+					e.preventDefault();
+					break;
+				case 38: //Down
+					mov_Y = 0;
+					e.preventDefault();
+					break;
+				case 39: //Right
+					cam_Y = 0;
+					e.preventDefault();
+					break;
+				case 40: //Up
+					mov_Y = 0;
+					e.preventDefault();
+					break;
+				case 65: //A
+					mov_X = 0; 
+					break;
+				case 68: //D
+					mov_X = 0;
+					break;
+				case 83: //S
+					mov_Z = 0;
+					break;
+				case 87: //W
+					mov_Z = 0;
+					break;
+					}
+			}
+			function cam_Move(){
+				(cam_Y != 0) ? camera.rotation.y += cam_Y : 0; //Look Left and Right
+				(mov_Y != 0) ? camera.translateY( mov_Y ) : 0; //Move Up and Down
+				(mov_X != 0) ? camera.translateX( mov_X ) : 0; //Move Left and Right
+				(mov_Z != 0) ? camera.translateZ( mov_Z ) : 0; //Move Forwards and Backwards
+				if(jump && !j_Up && !j_Down){
+					j_Timer = -12;
+					j_Up = !j_Up;
+					jump = !jump;
+					console.log("j_Down " + j_Timer + " " + j_Up + " " + j_Down);
+				}
+				else if(j_Down){
+					console.log("j_Down " + j_Timer + " " + j_Up + " " + j_Down);
+					camera.position.y -= (1/2)*(g*(j_Timer * j_Timer));
+					j_Timer++;
+					if(j_Timer > 12){
+						j_Down = !j_Down;
+						delete j_Timer;
+					}
+				}
+				else if(j_Up){
+					console.log("j_Up " + j_Timer + " " + j_Up + " " + j_Down);
+					camera.position.y += (1/2)*(g*(j_Timer * j_Timer));
+					j_Timer++;
+					if(j_Timer == 0){
+						j_Up = !j_Up;
+						j_Down = !j_Down;
+						j_Timer++;
+					}
+				}
+			}
+		}
+		
+		//EXPERIMENTAL CODE
+		{
+			var sg = new THREE.SphereGeometry(100,16,12);
+			//make cylinder - ideally the segmentation would be similar to predictable results
+			var cg = new THREE.CylinderGeometry(100, 100, 200, 16, 4, false );
+			//move vertices down for cylinder, so it maches half the sphere - offset pivot
+			for(var i = 0 ; i < cg.vertices.length; i++) cg.vertices[i].position.y -= 100;
+			//merge meshes
+			THREE.GeometryUtils.merge(sg,cg);
+			var mesh = new THREE.Mesh( sg,new THREE.MeshLambertMaterial( { color: 0x2D303D, wireframe: true, shading: THREE.FlatShading } ));
+			scene.add(mesh);
+		}
+	}
+	
+	function animate(){
+		requestAnimationFrame( animate );
+		cam_Move();
+		//EXPERIMENTAL ANIMATE CODE
+		{
+		
+		
+		}
+		
+		renderer.render( scene, camera );
+		stats.update();
+	}
+	
+	function onWindowResize(){
+		camera.aspect = window.innerWidth / window.innerHeight;
+		camera.updateProjectionMatrix();
+		
+		renderer.setSize( window.innerWidth, window.innerHeight );
+	}
+	
+</script>
+</body>
+</html>

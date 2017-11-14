@@ -1,0 +1,936 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+<meta charset="utf-8">;
+<title>Game Project Demo</title>
+
+<style>
+body
+{
+background-color: #000000;
+margin: 0px;
+position: fixed;
+}
+
+div.topbar{
+background-color: #000000;
+font-color: #FFFFFF;
+position: fixed;
+left: 0;
+top: 0;
+margin: 0px;
+padding-left: 25%;
+}
+
+</style>
+
+<!--SCRIPTS FOR THREE.JS UTILITY-->
+<script src="build/three.js"></script>
+<script src="examples/js/libs/stats.min.js"></script>
+<script src="examples/js/Mirror.js"></script>
+<script src="build/linkedlist.js"></script>
+<!--SCRIPT AREA END-->
+</head>
+<body>
+<div class="topbar">
+<form name="form" style="color: #FFFFFF">
+	Difficulty: <input type="text" name="diff" value=8>
+	<a href="javascript: generateLevel( document.form.diff.value)" style="color: #FFFFFF">START</a>
+</form>
+</div>
+<!--<audio id="AUDIO" ></audio>-->
+<div id="container"></div>
+<script>
+
+	var camera, scene, renderer; //Render basics
+	var POV = 75;
+	var geometry, material, mesh, floor; //Mesh basics
+	var container, stats; //three.js stats
+	var cam_X = 0, cam_Y = 0.025, mov_Z = 10, mov_X = 10, x_Angle = -0.5, Y_Angle = 0; //Movement scalars
+	var xPriority = 0, yPriority = 0, zPriority = 0, x_Plus = 0, x_Minus = 0, y_Plus = 0, y_Minus = 0, z_Plus = 0, z_Minus = 0; //Movement
+	var player = new THREE.Object3D(); //Player object
+	var then, now, delta; // Timer
+	var jump = false, j_Up = false, j_Down = false, j_Timer, g = 0.9; //Jump
+	var raycaster = new THREE.Raycaster(); //Raycaster
+	var lastroom = -1;
+	var level = new LinkedList();
+	var xspeed, zspeed;
+	var blackout = 0;
+	var frontMirrorCam, backMirrorCam, leftMirrorCam, rightMirrorCam, ceilingMirrorCam;
+	var frontMirror, backMirror, leftMirror, rightMirror, ceilingMirror;
+	var floorTexture, ceilingTexture, carptetTexture;
+	var collidable = [];
+	var startTime, endTime;
+	var gamestart = moveroom = showalert = false; // Flags
+	var sceneRTT;
+
+	init();
+	animate();
+
+	//Mouse events
+	//window.addEventListener( "mousemove", lookAround, false) ;
+
+	//Movement
+	var speed = function(sp, dt) {
+    		return (sp * dt) * (60 / 1000);
+	}
+	then = new Date().getTime();
+
+	window.addEventListener( "keydown", checkKey, false);
+	function checkKey( e){
+		var x = e.keyCode || e.which;
+		//console.log( e);
+		switch ( x){
+		case 37: //Left
+			if( y_Plus == 0){
+				yPriority++;
+				y_Plus = yPriority;
+			}
+			e.preventDefault();
+			break;
+		case 38: //Down
+			cam_X = 0.025;
+			e.preventDefault();
+			break;
+		case 39: //Right
+			if( y_Minus == 0){
+				yPriority++;
+				y_Minus = yPriority;
+			}
+			e.preventDefault();
+			break;
+		case 40: //Up
+			cam_X = -0.025;
+			e.preventDefault();
+			break;
+		case 65: //A
+			if( x_Minus == 0){
+				xPriority++;
+				x_Minus = xPriority;
+			}
+			break;
+		case 68: //D
+			if( x_Plus == 0){
+				xPriority++;
+				x_Plus = xPriority;
+			}
+			break;
+		case 83: //S
+			if( z_Plus == 0){
+				zPriority++;
+				z_Plus = zPriority;
+			}
+			break;
+		case 87: //W
+			if( z_Minus == 0){
+				zPriority++;
+				z_Minus = zPriority;
+			}
+			break;
+		case 32: //Space
+			jump = true;
+			e.preventDefault();
+			}
+	}
+
+	window.addEventListener( "keyup", checkUp, false);
+	function checkUp( e){
+		var x = e.keyCode || e.which;
+		//console.log( e);
+		switch ( x){
+		case 37: //Left
+			y_Plus = 0;
+			yPriority--;
+			if( y_Minus == 2){
+				y_Minus--;
+			}
+			e.preventDefault();
+			break;
+		case 38: //Down
+			cam_X = 0;
+			e.preventDefault();
+			break;
+		case 39: //Right
+			y_Minus = 0;
+			yPriority--;
+			if( y_Plus == 2){
+				y_Plus--;
+			}
+			e.preventDefault();
+			break;
+		case 40: //Up
+			cam_X = 0;
+			e.preventDefault();
+			break;
+		case 65: //A
+			x_Minus = 0;
+
+			if( x_Plus == 2){
+				x_Plus--;
+			}
+			xPriority--;
+			break;
+		case 68: //D
+			x_Plus = 0;
+			if( x_Minus == 2){
+				x_Minus--;
+			}
+			xPriority--;
+			break;
+		case 83: //S
+			z_Plus = 0;
+			if( z_Minus == 2){
+				z_Minus--;
+			}
+			zPriority--;
+			break;
+		case 87: //W
+			z_Minus = 0;
+			zPriority--;
+			if( z_Plus == 2){
+				z_Plus--;
+			}
+			break;
+			}
+	}
+
+	function cam_Move(){
+		if( cam_X != 0){
+
+			x_Angle += speed( -cam_X, delta); //Camera up/down angle
+
+			if( x_Angle < -0.5){
+				x_Angle = -0.5; //Down Limit
+			}
+			if( x_Angle > 0.5){
+				x_Angle = 0.5; //Up Limit
+			}
+
+			camera.rotation.x = x_Angle; //Look Up and Down
+		}
+	}
+
+	function player_Move(){
+		var xprev = player.position.x;
+		var zprev = player.position.z;
+		if(y_Plus > y_Minus){
+			player.rotation.y -= speed( cam_Y, delta); //Look Left
+			Y_Angle -= speed( cam_Y, delta);
+		}
+		if(y_Plus < y_Minus){
+			player.rotation.y += speed( cam_Y, delta); //Look Right
+			Y_Angle += speed( cam_Y, delta);
+		}
+		if( x_Plus > x_Minus){
+			xspeed = -speed( mov_X, delta);
+			player.translateX( xspeed); //Move Right
+		}
+		if( x_Plus < x_Minus){
+			xspeed = speed( mov_X, delta);
+			player.translateX( xspeed); //Move Left
+		}
+		if( z_Plus > z_Minus){
+			zspeed = -speed( mov_Z, delta);
+			player.translateZ( zspeed); //Move Backwards
+		}
+		if( z_Plus < z_Minus){
+			zspeed = speed( mov_Z, delta);
+			player.translateZ( zspeed); //Move Forwards
+		}
+		//Move camera
+		camera.position.x = player.position.x;
+		camera.position.z = player.position.z;
+		camera.rotation.y = player.rotation.y;
+
+		/*
+		var roomBox = new THREE.Box3().setFromObject( level.current.data.environment);
+
+		frontMirrorCam.position.x = player.position.x;
+		frontMirrorCam.position.z = (player.position.z - (2 * roomBox.min.z));
+		backMirrorCam.position.x = player.position.x;
+		backMirrorCam.position.z = (player.position.z + (2 * roomBox.max.z));
+
+		leftMirrorCam.position.z = player.position.z;
+		leftMirrorCam.position.x = (player.position.x - (2 * roomBox.min.x));
+		rightMirrorCam.position.z = player.position.z;
+		rightMirrorCam.position.x = (player.position.x + (2 * roomBox.max.x));
+		*/
+	}
+
+	function player_Jump(){
+		if( jump && !j_Up && !j_Down){
+			j_Timer = -12;
+			j_Up = !j_Up;
+			jump = !jump;
+			console.log( "j_Down " + j_Timer + " " + j_Up + " " + j_Down);
+		}
+		else if( j_Down){
+			//console.log( "j_Down " + j_Timer + " " + j_Up + " " + j_Down);
+			camera.position.y -= ( 1 / 2) * ( g * ( j_Timer * j_Timer));
+			player.position.y = camera.position.y - 750;
+			j_Timer++;
+			if( j_Timer > 12){
+				j_Down = !j_Down;
+				delete j_Timer;
+			}
+		}
+		else if( j_Up){
+			console.log( "j_Up " + j_Timer + " " + j_Up + " " + j_Down);
+			camera.position.y += ( 1 / 2) * ( g * ( j_Timer * j_Timer));
+			player.position.y = camera.position.y - 750;
+			j_Timer++;
+			if( j_Timer == 0){
+				j_Up = !j_Up;
+				j_Down = !j_Down;
+				j_Timer++;
+			}
+		}
+	}
+
+	function collision(){
+		var bbox = new THREE.Box3().setFromObject( player);
+		for( var i = 0; i < 4; i++){
+			var obj = level.current.data.interaction[i];
+			var objbox = new THREE.Box3().setFromObject(obj);
+			if ( ( bbox.min.x <= objbox.max.x && bbox.max.x >= objbox.min.x) && ( bbox.min.z <= objbox.max.z && bbox.max.z >= objbox.min.z)){
+				if( i == 0){
+					level.move("front");
+				}
+				else if( i == 1){
+					level.move("back");
+				}
+				else if( i == 2){
+					level.move("left");
+				}
+				else if( i == 3){
+					level.move("right");
+				}
+				moveroom = true;
+			}
+		}
+		for( var i = 0; i < level.current.data.lamps.size; i++){
+			var obj = level.current.data.lamps[i];
+			var objbox = new THREE.Box3().setFromObject(obj);
+			if ( ( bbox.min.x <= objbox.max.x && bbox.max.x >= objbox.min.x) && ( bbox.min.z <= objbox.max.z && bbox.max.z >= objbox.min.z)){
+				player.position.x = 0;
+				player.position.z = 0;
+			}
+		}
+		while( bbox.max.x > 1250){
+			player.position.x = player.position.x - 1;
+			bbox = new THREE.Box3().setFromObject( player);
+		}
+		while( bbox.max.z > 1250){
+			player.position.z = player.position.z - 1;
+			bbox = new THREE.Box3().setFromObject( player);
+		}
+		while( bbox.min.x < -1250){
+			player.position.x = player.position.x + 1;
+			bbox = new THREE.Box3().setFromObject( player);
+		}
+		while( bbox.min.z < -1250){
+			player.position.z = player.position.z + 1;
+			bbox = new THREE.Box3().setFromObject( player);
+		}
+	}
+
+	function getRandomColor() {
+		return "#"+((1<<24)*Math.random()|0).toString(16);
+	}
+
+//ENVIRONMENT OBJECTS
+	var generateenvironment = function(){
+		var room = [];
+
+		//Floor
+		geometry = new THREE.PlaneGeometry( 2500, 2500, 0, 0); // ( x, y, widthSegments, heightSegments)
+		material = new THREE.MeshPhongMaterial( { color: 0x898989, specular: 0x000000, emissive: 0x000000, shininess: 100, side: THREE.DoubleSide, map: floorTexture});
+
+		mesh = new THREE.Mesh( geometry, material);
+		mesh.rotation.x = - Math.PI / 2;
+		mesh.position.y = 0;
+		mesh.position.z = 0;
+		room.push( mesh);
+
+		//Ceiling
+		geometry = new THREE.PlaneGeometry( 2500, 2500, 0, 0); // ( x, y, widthSegments, heightSegments)
+		material = new THREE.MeshPhongMaterial( { color: 0x898989, specular: 0x000000, emissive: 0x000000, shininess: 100, side: THREE.DoubleSide, map: floorTexture});
+
+		mesh = new THREE.Mesh( geometry, material);
+		mesh.rotation.x = Math.PI / 2;
+		mesh.position.y = 1500;
+		mesh.position.z = 0;
+		room.push( mesh);
+
+		//Wall Front
+		geometry = new THREE.PlaneGeometry( 2500, 1500, 0, 0); // ( x, y, widthSegments, heightSegments)
+		material = new THREE.MeshPhongMaterial( { color: 0x151515, specular: 0x151515, emissive: 0x151515, shininess: 100, side: THREE.DoubleSide, map: carpetTexture});
+
+		mesh = new THREE.Mesh( geometry, material);
+		mesh.position.y = 750;
+		mesh.position.z = -1250;
+		room.push( mesh);
+
+		//Wall Back
+		geometry = new THREE.PlaneGeometry( 2500, 1500, 0, 0); // ( x, y, widthSegments, heightSegments)
+		material = new THREE.MeshPhongMaterial( { color: 0x151515, specular: 0x151515, emissive: 0x151515, shininess: 100, side: THREE.DoubleSide, map: carpetTexture});
+
+		mesh = new THREE.Mesh( geometry, material);
+		mesh.position.y = 750;
+		mesh.position.z = 1250;
+		room.push( mesh);
+
+		//Wall Left
+		geometry = new THREE.PlaneGeometry( 2500, 1500, 0, 0); // ( x, y, widthSegments, heightSegments)
+		material = new THREE.MeshPhongMaterial( { color: 0x151515, specular: 0x151515, emissive: 0x151515, shininess: 100, side: THREE.DoubleSide, map: carpetTexture});
+
+		mesh = new THREE.Mesh( geometry, material);
+		mesh.rotation.y = 1.57;
+		mesh.position.y = 750;
+		mesh.position.x	= -1250;
+		room.push( mesh);
+
+		//Wall Right
+		geometry = new THREE.PlaneGeometry( 2500, 1500, 0, 0); // ( x, y, widthSegments, heightSegments)
+		material = new THREE.MeshPhongMaterial( { color: 0x151515, specular: 0x151515, emissive: 0x151515, shininess: 100, side: THREE.DoubleSide, map: carpetTexture});
+
+		mesh = new THREE.Mesh( geometry, material);
+		mesh.rotation.y = 1.57;
+		mesh.position.y = 750;
+		mesh.position.x	= 1250;
+		room.push( mesh);
+
+		//Front Door
+		geometry = new THREE.PlaneGeometry( 500, 900, 0, 0); // ( x, y, widthSegments, heightSegments)
+		material = new THREE.MeshPhongMaterial( { color: 0x151515, specular: 0x151515, emissive: 0x151515, shininess: 100, side: THREE.DoubleSide, map: frontMirror});
+
+		mesh = new THREE.Mesh( geometry, material);
+		mesh.position.y = 450;
+		mesh.position.z = -1249;
+		room.push( mesh);
+
+		//Back Door
+		geometry = new THREE.PlaneGeometry( 500, 900, 0, 0); // ( x, y, widthSegments, heightSegments)
+		material = new THREE.MeshPhongMaterial( { color: 0x151515, specular: 0x151515, emissive: 0x151515, shininess: 100, side: THREE.DoubleSide, map: backMirror});
+
+		mesh = new THREE.Mesh( geometry, material);
+		mesh.position.y = 450;
+		mesh.position.z = 1249;
+		room.push( mesh);
+
+		//Left Door
+		geometry = new THREE.PlaneGeometry( 500, 900, 0, 0); // ( x, y, widthSegments, heightSegments)
+		material = new THREE.MeshPhongMaterial( { color: 0x151515, specular: 0x151515, emissive: 0x151515, shininess: 100, side: THREE.DoubleSide, map: leftMirror});
+
+		mesh = new THREE.Mesh( geometry, material);
+		mesh.rotation.y = 1.57;
+		mesh.position.y = 450;
+		mesh.position.x = -1249;
+		room.push( mesh);
+
+		//Right Door
+		geometry = new THREE.PlaneGeometry( 500, 900, 0, 0); // ( x, y, widthSegments, heightSegments)
+		material = new THREE.MeshPhongMaterial( { color: 0x151515, specular: 0x151515, emissive: 0x151515, shininess: 100, side: THREE.DoubleSide, map: rightMirror});
+
+		mesh = new THREE.Mesh( geometry, material);
+		mesh.rotation.y = 1.57;
+		mesh.position.y = 450;
+		mesh.position.x = 1249;
+		room.push( mesh);
+
+		return room;
+	}
+
+	//INTERACTION OBJECTS
+	function generateinteraction(){
+		var interaction = [];
+
+		//Front Door
+		geometry = new THREE.CubeGeometry( 500, 900, 50);
+		material = new THREE.MeshBasicMaterial( { opacity: 0});
+
+		mesh = new THREE.Mesh( geometry, material);
+		mesh.position.y = 450;
+		mesh.position.z = -1225;
+		mesh.visible = false;
+		interaction.push(mesh);
+
+		//Back Door
+		geometry = new THREE.CubeGeometry( 500, 900, 50);
+		material = new THREE.MeshBasicMaterial( { opacity: 0});
+
+		mesh = new THREE.Mesh( geometry, material);
+		mesh.position.y = 450;
+		mesh.position.z = 1225;
+		mesh.visible = false;
+		interaction.push(mesh);
+
+		//Left Door
+		geometry = new THREE.CubeGeometry( 500, 900, 50);
+		material = new THREE.MeshBasicMaterial( { opacity: 0});
+
+		mesh = new THREE.Mesh( geometry, material);
+		mesh.rotation.y = Math.PI / 2;
+		mesh.position.y = 450;
+		mesh.position.x = -1225;
+		mesh.visible = false;
+		interaction.push(mesh);
+
+		//Right Door
+		geometry = new THREE.CubeGeometry( 500, 900, 50);
+		material = new THREE.MeshBasicMaterial( { opacity: 0});
+
+		mesh = new THREE.Mesh( geometry, material);
+		mesh.rotation.y = Math.PI / 2;
+		mesh.position.y = 450;
+		mesh.position.x = 1225;
+		mesh.visible = false;
+		interaction.push(mesh);
+
+		return interaction;
+	}
+
+	//ADDITIONAL OBJECTS
+	{
+		//Lamp
+		var generatelamp = function(){
+			var lamp = new THREE.Object3D();
+			var color = getRandomColor;
+
+			//Shaft
+			geometry = new THREE.CylinderGeometry( 5, 5, 730);
+			material = new THREE.MeshPhongMaterial( { color: color});
+
+			mesh = new THREE.Mesh( geometry, material);
+			mesh.position.y = 380;
+			lamp.add( mesh);
+
+			//Base
+			geometry = new THREE.CylinderGeometry( 50, 50, 20);
+			material = new THREE.MeshPhongMaterial( { color: color});
+
+			mesh = new THREE.Mesh( geometry, material);
+			mesh.position.y = 10;
+			lamp.add( mesh);
+
+			//Top
+			geometry = new THREE.CylinderGeometry( 50, 70, 100);
+			material = new THREE.MeshPhongMaterial( { color: color});
+
+			mesh = new THREE.Mesh( geometry, material);
+			mesh.position.y = 790;
+			lamp.add( mesh);
+			return lamp;
+		}
+
+		//Carpet
+		var generatecarpet = function(){
+			var carpet = new THREE.Object3D();
+			var color = getRandomColor;
+
+			geometry = new THREE.PlaneGeometry( 500, 800, 0, 0);
+			//material = new THREE.ShaderMaterial();
+			material = new THREE.MeshPhongMaterial( { color: color, side: THREE.DoubleSide, map: carpetTexture});
+
+			mesh = new THREE.Mesh( geometry, material);
+			mesh.rotation.x = 1.57;
+			mesh.position.y = 5;
+
+			carpet.add( mesh);
+			return carpet;
+		}
+	}
+
+	var generateRoom = function(){
+		var environment = generateenvironment();
+		var interactions = generateinteraction();
+		var lampcount = Math.floor( Math.random() * 3);
+		var lamps = [];
+		var carpetcount = 0;
+		if( lampcount == 1){
+			var lamp = new generatelamp();
+			var loc = Math.floor( ( Math.random() * 4) + 1);
+			if( loc == 1){
+				lamp.position.x = 1200;
+				lamp.position.z = 1200;
+			}
+			else if( loc == 2){
+				lamp.position.x = -1200;
+				lamp.position.z = 1200;
+			}
+			else if( loc == 3){
+				lamp.position.x = 1200;
+				lamp.position.z = -1200;
+			}
+			else if( loc == 4){
+				lamp.position.x = -1200;
+				lamp.position.z = -1200;
+			}
+			lamps.push( lamp);
+		}
+		else if( lampcount == 2){
+			var lamp1 = generatelamp();
+			var lamp2 = generatelamp();
+			var loc = Math.floor( Math.random() * 2);
+			if( loc){
+				lamp1.position.x = 1200;
+				lamp1.position.z = 1200;
+				lamp2.position.x = -1200;
+				lamp2.position.z = -1200;
+			}
+			else{
+				lamp1.position.x = -1200;
+				lamp1.position.z = 1200;
+				lamp2.position.x = 1200;
+				lamp2.position.z = -1200;
+			}
+			lamps.push( lamp1);
+			lamps.push( lamp2);
+		}
+		var carpets = Math.floor( Math.random() * 2);
+		if( carpets){
+			var carpet = generatecarpet();
+			var carpetangle = Math.floor( ( Math.random() * 4) + 1);
+			if( carpetangle == 1){
+				carpet.rotation.y = 0.785;
+			}
+			else if( carpetangle == 2){
+				carpet.rotation.y = 1.57;
+			}
+			else if( carpetangle == 3){
+				carpet.rotation.y = 2.355;
+			}
+		}
+
+		//Lights
+		var ambientlight = new THREE.AmbientLight( getRandomColor());
+		ambientlight.position.set( 0, 750, 0);
+		var pointlight = new THREE.PointLight( getRandomColor());
+		pointlight.position.set( Math.floor((Math.random() * 2500) - 1250), Math.floor((Math.random() * 2500) - 1250), Math.floor((Math.random() * 2500) - 1250));
+
+		var Room = {
+			environment: environment,
+			lamps: lamps,
+			lampcount: lampcount,
+			carpet: carpet,
+			carpetcount: carpets,
+			interaction: interactions,
+			pointlight: pointlight,
+			ambientlight: ambientlight
+		}
+		return Room;
+	}
+
+	function generateLevel( difficulty){
+		console.log("Generating Level... Difficulty: ", difficulty);
+		var i = 0;
+		while( i < difficulty){
+			var Room = generateRoom();
+			var exit = Math.floor( Math.random() * 4);
+			if( exit == 0){
+				var backdoor = Math.floor( Math.random() * i);
+				var leftdoor = Math.floor( Math.random() * i);
+				var rightdoor = Math.floor( Math.random() * i);
+				level.add( -1, backdoor, leftdoor, rightdoor, "front", Room);
+			}
+			else if( exit == 1){
+				var frontdoor = Math.floor( Math.random() * i);
+				var leftdoor = Math.floor( Math.random() * i);
+				var rightdoor = Math.floor( Math.random() * i);
+				level.add( frontdoor, -1, leftdoor, rightdoor, "back", Room);
+			}
+			else if( exit == 2){
+				var frontdoor = Math.floor( Math.random() * i);
+				var backdoor = Math.floor( Math.random() * i);
+				var rightdoor = Math.floor( Math.random() * i);
+				level.add( frontdoor, backdoor, -1, rightdoor, "left", Room);
+			}
+			else if( exit == 3){
+				var frontdoor = Math.floor( Math.random() * i);
+				var backdoor = Math.floor( Math.random() * i);
+				var leftdoor = Math.floor( Math.random() * i);
+				level.add( frontdoor, backdoor, leftdoor, -1, "right", Room);
+			}
+			i++;
+		}
+		gamestart = moveroom = showalert = true;
+		console.log("gamestart: true");
+		console.log("level: ", level);
+
+		startTime = new Date().getTime();
+	}
+
+	function showlevel(){
+		console.log("Level: ", level);
+	}
+
+	/*function switchAudio( roomID){
+		audio = document.getElementById( "AUDIO");
+		console.log( "audio src start: ", audio.src);
+if(audio.src != "http://www.ugprojects.com/boramakar/CS405/audio/" + roomID + ".mp3" && audio.src != "http://www.ugprojects.com/boramakar/CS405/audio/" + roomID + ".ogg")
+{
+
+                audio.pause();
+
+		if ( audio.canPlayType( "audio/mpeg")) {
+                        audio.setAttribute( "src", "audio/" + roomID + ".mp3");
+		} else {
+	                audio.setAttribute( "src", "audio/" + roomID + ".ogg");
+		}
+                audio.load();
+                audio.play();
+}
+
+		console.log( "audio src end: ", audio.src);
+	}*/
+
+	function init() {
+		window.alert("Welcome to The Timeless Mansion! Your aim is to escape the mansion by moving through the rooms.\n\nTo move you need to use WASD.\n\nTo look around you can use the ARROW KEYS.\n\nMove through the rooms by moving to the DIMENSIONAL RIFTS, or DOORS OF LIGHT as you see them.\n\nGood luck!");
+
+		container = document.getElementById( 'container');
+        //document.getElementById( "AUDIO").loop = true;
+
+		floorTexture = new THREE.ImageUtils.loadTexture( 'images/floor.jpg');
+		ceilingTexture = new THREE.ImageUtils.loadTexture( 'images/ceiling.jpg');
+		carpetTexture = new THREE.ImageUtils.loadTexture( 'images/carpet.jpg');
+
+		//Scene and Camera
+		scene = new THREE.Scene();
+
+		camera = new THREE.PerspectiveCamera( POV, window.innerWidth / window.innerHeight, 1, 10000);
+		camera.position.z = player.position.z;
+		camera.position.y = player.position.y + 750;
+		camera.position.x = player.position.x;
+		camera.rotation.order = 'YXZ';
+
+		frontMirrorCam = new THREE.PerspectiveCamera( POV, window.innerWidth / window.innerHeight, 1, 10000);
+		frontMirrorCam.position.z = -1249;
+		frontMirrorCam.position.y = 750;
+		frontMirrorCam.position.x = 0;
+		scene.add( frontMirrorCam);
+		frontMirrorCam.lookAt( player.position);
+
+		backMirrorCam = new THREE.PerspectiveCamera( POV, window.innerWidth / window.innerHeight, 1, 10000);
+		backMirrorCam .position.z = 1249;
+		backMirrorCam .position.y = 750;
+		backMirrorCam .position.x = 0;
+		scene.add( backMirrorCam );
+		backMirrorCam .lookAt( player.position);
+
+		leftMirrorCam = new THREE.PerspectiveCamera( POV, window.innerWidth / window.innerHeight, 1, 10000);
+		leftMirrorCam.position.z = 0;
+		leftMirrorCam.position.y = 750;
+		leftMirrorCam.position.x = -1249;
+		scene.add( leftMirrorCam);
+		leftMirrorCam.lookAt( player.position);
+
+		rightMirrorCam = new THREE.PerspectiveCamera( POV, window.innerWidth / window.innerHeight, 1, 10000);
+		rightMirrorCam.position.z = 0;
+		rightMirrorCam.position.y = 750;
+		rightMirrorCam.position.x = 1249;
+		scene.add( rightMirrorCam);
+		rightMirrorCam.lookAt( player.position);
+
+		ceilingMirrorCam = new THREE.OrthographicCamera( POV, window.innerWidth / window.innerHeight, 1, 10000);
+		ceilingMirrorCam.position.z = 0;
+		ceilingMirrorCam.position.y = 1499;
+		ceilingMirrorCam.position.x = 0;
+		scene.add( ceilingMirrorCam);
+		ceilingMirrorCam.lookAt( player.position);
+
+		//Renderer
+		renderer = new THREE.WebGLRenderer();
+		renderer.setPixelRatio( window.devicePixelRatio);
+		renderer.setSize( window.innerWidth, window.innerHeight);
+		container.appendChild( renderer.domElement);
+
+		//Stats
+		stats = new Stats();
+		stats.domElement.style.position = 'absolute';
+		stats.domElement.style.top = '0px';
+		stats.domElement.style.zIndex = 100;
+		container.appendChild( stats.domElement);
+
+		frontMirror = new THREE.WebGLRenderTarget(  window.innerWidth, window.innerHeight, { format: THREE.RGBFormat } );
+		backMirror = new THREE.WebGLRenderTarget( window.innerWidth, window.innerHeight, { format: THREE.RGBFormat } );
+		leftMirror = new THREE.WebGLRenderTarget( window.innerWidth, window.innerHeight, { format: THREE.RGBFormat } );
+		rightMirror = new THREE.WebGLRenderTarget( window.innerWidth, window.innerHeight, { format: THREE.RGBFormat } );
+		ceilingMirror= new THREE.WebGLRenderTarget( window.innerWidth, window.innerHeight, { format: THREE.RGBFormat } );
+
+		floorTexture.wrapS = THREE.RepeatWrapping;
+		floorTexture.wrapT = THREE.RepeatWrapping;
+		floorTexture.repeat.set( 1, 1);
+
+		ceilingTexture.wrapS = THREE.RepeatWrapping;
+		ceilingTexture.wrapT = THREE.RepeatWrapping;
+		ceilingTexture.repeat.set( 1, 1);
+
+		carpetTexture.wrapS = THREE.RepeatWrapping;
+		carpetTexture.wrapT = THREE.RepeatWrapping;
+		carpetTexture.repeat.set( 1, 1);
+
+		//PLAYER OBJECTS
+		{
+			//Player Head
+			geometry = new THREE.CubeGeometry( 150, 150, 150);
+			material = new THREE.MeshPhongMaterial( { color: 0x22ff22});
+
+			mesh = new THREE.Mesh( geometry, material);
+			mesh.position.y = 575;
+			player.add( mesh);
+
+			//Player Body
+			geometry = new THREE.CubeGeometry( 200, 300, 150);
+			material = new THREE.MeshPhongMaterial( { color: 0x22ff22});
+
+			mesh = new THREE.Mesh( geometry, material);
+			mesh.position.y = 350;
+			player.add( mesh);
+
+			//Player Left Leg
+			geometry = new THREE.CubeGeometry( 90, 200, 150);
+			material = new THREE.MeshPhongMaterial( { color: 0x22ff22});
+
+			mesh = new THREE.Mesh( geometry, material);
+			mesh.position.x = -55;
+			mesh.position.y = 100;
+			player.add( mesh)
+
+			//Player Right Leg
+			geometry = new THREE.CubeGeometry( 90, 200, 150);
+			material = new THREE.MeshPhongMaterial( { color: 0x22ff22});
+
+			mesh = new THREE.Mesh( geometry, material);
+			mesh.position.x = 55;
+			mesh.position.y = 100;
+			player.add( mesh);
+
+			//Player Left Arm
+			geometry = new THREE.CubeGeometry( 80, 200, 150);
+			material = new THREE.MeshPhongMaterial( { color: 0x22ff22});
+
+			mesh = new THREE.Mesh( geometry, material);
+			mesh.position.x = -140;
+			mesh.position.y = 400;
+			player.add( mesh);
+
+			//Player Right Arm
+			geometry = new THREE.CubeGeometry( 80, 200, 150);
+			material = new THREE.MeshPhongMaterial( { color: 0x22ff22});
+
+			mesh = new THREE.Mesh( geometry, material);
+			mesh.position.x = 140;
+			mesh.position.y = 400;
+			player.add( mesh);
+
+			scene.add( player);
+		}
+
+		//Window resize Listener
+		window.addEventListener( 'resize', onWindowResize, false);
+	}
+
+	function onWindowResize(){
+		camera.aspect = window.innerWidth / window.innerHeight;
+		camera.updateProjectionMatrix();
+
+		renderer.setSize( window.innerWidth, window.innerHeight);
+	}
+
+	function render(){
+		renderer.render( scene, frontMirrorCam, frontMirror, true);
+		renderer.render( scene, backMirrorCam, backMirror, true);
+		renderer.render( scene, leftMirrorCam, leftMirror, true);
+		renderer.render( scene, rightMirrorCam, rightMirror, true);
+
+		level.current.data.environment[1].visibility = false;
+		renderer.render( scene, ceilingMirrorCam, ceilingMirror, true);
+		level.current.data.environment[1].visibility = true;
+
+		renderer.render( scene, camera);
+	}
+
+	function animate(){
+		requestAnimationFrame( animate);
+
+		now = new Date().getTime();
+		delta = then - now;
+
+		if( gamestart && level.current == -1 && showalert){
+			endTime = new Date().getTime();
+			var timems = endTime - startTime;
+			var timesec = Math.floor( (timems / 1000) % 60);
+			var timemin = Math.floor( ((timems / 1000) / 60) % 60);
+			var timeh = Math.floor( ((timems / 1000) / 60) / 60);
+
+			window.alert("Congratulations!!!\n\nYou have managed to escape from level " + document.form.diff.value + " of The Timeless Mansion!\nNumber of moves: " + level.moves + ".\nTime elapsed: " + timeh + " : " + timemin + " : " + timesec);
+			showalert = false;
+			gamestart = false;
+			level = null;
+			scene.children = [];
+			moveroom = false;
+
+			renderer.render( scene, camera);
+		}
+		else if( moveroom){
+			scene.children = [];
+renderer.render( scene, camera);
+			player.position.x = 0;
+			player.position.z = 0;
+			player.position.y = 0;
+			gamestart = false;
+			if( blackout == 60){
+				console.log("Drawing room: ", level.current.id);
+
+				scene.add( frontMirrorCam);
+				scene.add( backMirrorCam);
+				scene.add( leftMirrorCam);
+				scene.add( rightMirrorCam);
+				scene.add( ceilingMirrorCam);
+
+				data = level.current.data;
+				console.log("data: ", data);
+				scene.add( data.ambientlight);
+				scene.add( data.pointlight);
+				scene.add( player);
+				console.log("Lampcount: ", data.lampcount);
+				console.log("Carpetcount: ", data.carpetcount);
+				for( var i = 0; i < data.environment.length; i++){
+					scene.add( data.environment[i]);
+				}
+				for( var i = 0; i < data.interaction.length; i++){
+					scene.add( data.interaction[i]);
+				}
+				for( var i = 0; i < data.lampcount; i++){
+					scene.add(data.lamps[i]);
+				}
+				if( data.carpetcount){
+					scene.add( data.carpet);
+				}
+				camera.rotation.x = x_Angle;
+				moveroom = false;
+				gamestart = true;
+				blackout = 0;
+
+                //switchAudio( level.current.id);
+			}
+			else{
+				blackout++;
+			}
+		}
+		if( gamestart){
+			player_Move();
+			cam_Move();
+			player_Jump();
+			collision();
+
+			render();
+		}
+		stats.update();
+
+		then = now;
+	}
+
+</script>
+</body>
+</html>

@@ -1,0 +1,368 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+<meta charset="utf-8">;
+<title>Game Project Demo</title>
+ 
+<style>
+body
+{
+background-color: #000000;
+margin: 0px;
+}
+</style>
+
+<!--SCRIPTS FOR THREE.JS UTILITY-->
+<script src="build/Three.js"></script>
+<script src="examples/js/libs/stats.min.js"></script>
+<!--SCRIPT AREA END-->
+</head>
+<body>
+<div id="container"></div>
+<script>
+	
+	var camera, scene, renderer;
+	var geometry, material, mesh, floor;
+	var container, stats;
+	var mov_Y = 0, cam_Y = 0, mov_Z = 0, mov_X = 0;
+	var player = new Array( 6 );
+	var timer;
+	var jump = false, j_Up = false, j_Down = false, j_Timer, g = 0.9;
+	
+	init();
+	animate();
+
+	timer = Date()*0.0001;
+	
+	//Mouse events
+	//window.addEventListener( "mousemove", lookAround, false ) ;
+	
+	//Movement
+	window.addEventListener( "keydown", checkKey, false );
+	function checkKey( e ){
+		var x = e.keyCode || e.which;
+		console.log(e);
+		switch (x){
+		case 37: //Left
+			cam_Y = 0.05;
+			e.preventDefault();
+			break;
+		case 38: //Down
+			mov_Y = 20;
+			e.preventDefault();
+			break;
+		case 39: //Right
+			cam_Y = -0.05;
+			e.preventDefault();
+			break;
+		case 40: //Up
+			mov_Y = -20;
+			e.preventDefault();
+			break;
+		case 65: //A
+	 		mov_X = -20; 
+			break;
+		case 68: //D
+			mov_X = 20;
+			break;
+		case 83: //S
+			mov_Z = 20;
+			break;
+		case 87: //W
+			mov_Z = -20;
+			break;
+		case 32: //Space
+			jump = true;
+			}
+	}
+	
+	window.addEventListener( "keyup", checkUp, false );
+	function checkUp( e ){
+		var x = e.keyCode || e.which;
+		console.log(e);
+		switch (x){
+		case 37: //Left
+			cam_Y = 0;
+			e.preventDefault();
+			break;
+		case 38: //Down
+			mov_Y = 0;
+			e.preventDefault();
+			break;
+		case 39: //Right
+			cam_Y = 0;
+			e.preventDefault();
+			break;
+		case 40: //Up
+			mov_Y = 0;
+			e.preventDefault();
+			break;
+		case 65: //A
+	 		mov_X = 0; 
+			break;
+		case 68: //D
+			mov_X = 0;
+			break;
+		case 83: //S
+			mov_Z = 0;
+			break;
+		case 87: //W
+			mov_Z = 0;
+			break;
+			}
+	}
+	
+	function cam_Move(){
+		var cam_X = mov_Y * 0.004;
+		(cam_Y != 0) ? camera.rotation.y += cam_Y : 0; //Look Left and Right
+		//(cam_X != 0) ? camera.rotation.x += cam_X : 0; //Look Up and Down
+		(mov_Y != 0) ? camera.translateY( mov_Y ) : 0; //Move Up and Down
+		(mov_X != 0) ? camera.translateX( mov_X ) : 0; //Move Left and Right
+		(mov_Z != 0) ? camera.translateZ( mov_Z ) : 0; //Move Forwards and Backwards
+		if( jump && !j_Up && !j_Down ){
+			j_Timer = -12;
+			j_Up = !j_Up;
+			jump = !jump;
+			console.log( "j_Down " + j_Timer + " " + j_Up + " " + j_Down );
+		}
+		else if( j_Down ){
+			console.log( "j_Down " + j_Timer + " " + j_Up + " " + j_Down );
+			camera.position.y -= ( 1 / 2 ) * ( g * ( j_Timer * j_Timer ) );
+			j_Timer++;
+			if(j_Timer > 12){
+				j_Down = !j_Down;
+				delete j_Timer;
+			}
+		}
+		else if(j_Up){
+			console.log( "j_Up " + j_Timer + " " + j_Up + " " + j_Down );
+			camera.position.y += ( 1 / 2 ) * ( g * ( j_Timer * j_Timer ) );
+			j_Timer++;
+			if( j_Timer == 0 ){
+				j_Up = !j_Up;
+				j_Down = !j_Down;
+				j_Timer++;
+			}
+		}
+	}
+	
+	function player_Move(){
+		for ( i = 0, length = player.length; i < length; i++ ){
+			(cam_Y != 0) ? player[i].rotation.y += cam_Y : 0; //Look Left and Right
+			(mov_Y != 0) ? player[i].rotation.x += cam_X : 0; //Look Up and Down
+			//(mov_Y != 0) ? camera.translateY( mov_Y ) : 0; //Move Up and Down
+			(mov_X != 0) ? player[i].translateX( mov_X ) : 0; //Move Left and Right
+			(mov_Z != 0) ? player[i].translateZ( mov_Z ) : 0; //Move Forwards and Backwards
+		}
+	}
+	
+	function init() {
+		container = document.createElement('div');
+		document.body.appendChild(container);
+		
+		//Scene and Camera
+		scene = new THREE.Scene();
+		
+		camera = new THREE.PerspectiveCamera( 65, window.innerWidth / window.innerHeight, 1, 10000 );
+		camera.position.z = 3000;
+		camera.position.y = 500;
+		camera.rotation.order = 'YXZ';
+		
+		//ENVIRONMENT OBJECTS
+		{
+			//Ceiling
+			geometry = new THREE.PlaneGeometry( 2500, 2500, 0, 0); // (x, y, widthSegments, heightSegments)
+			material = new THREE.MeshBasicMaterial( { color: 0x00ffff, wireframe: true} );
+
+			mesh = new THREE.Mesh( geometry, material );
+			mesh.rotation.x = 1.57;
+			mesh.position.y = 1500;
+			mesh.position.z = 0;
+			scene.add( mesh );
+			
+			//Floor
+			geometry = new THREE.PlaneGeometry( 2500, 2500, 0, 0); // (x, y, widthSegments, heightSegments)
+			material = new THREE.MeshBasicMaterial( { color: 0x0000ff, wireframe: true} );
+
+			mesh = new THREE.Mesh( geometry, material );
+			mesh.rotation.x = 1.57;
+			mesh.position.y = 0;
+			mesh.position.z = 0;
+			scene.add( mesh );
+			floor = mesh;
+
+			//Wall Front
+			geometry = new THREE.PlaneGeometry( 2500, 1500, 0, 0); // (x, y, widthSegments, heightSegments)
+			material = new THREE.MeshBasicMaterial( { color: 0x00ff00, wireframe: true} );
+
+			mesh = new THREE.Mesh( geometry, material );
+			mesh.position.y = 750;
+			mesh.position.z = -1250;
+			scene.add( mesh );
+			
+			//Wall Back
+			geometry = new THREE.PlaneGeometry( 2500, 1500, 0, 0); // (x, y, widthSegments, heightSegments)
+			material = new THREE.MeshBasicMaterial( { color: 0xffffff, wireframe: true} );
+
+			mesh = new THREE.Mesh( geometry, material );
+			mesh.position.y = 750;
+			mesh.position.z = 1250;
+			scene.add( mesh );
+			
+			//Wall Left
+			geometry = new THREE.PlaneGeometry( 2500, 1500, 0, 0); // (x, y, widthSegments, heightSegments)
+			material = new THREE.MeshBasicMaterial( { color: 0xffff00, wireframe: true} );
+
+			mesh = new THREE.Mesh( geometry, material );
+			mesh.rotation.y = 1.57;
+			mesh.position.y = 750;
+			mesh.position.x	= -1250;
+			scene.add( mesh );
+			
+			//Wall Right
+			geometry = new THREE.PlaneGeometry( 2500, 1500, 0, 0); // (x, y, widthSegments, heightSegments)
+			material = new THREE.MeshBasicMaterial( { color: 0xff00ff, wireframe: true} );
+
+			mesh = new THREE.Mesh( geometry, material );
+			mesh.rotation.y = 1.57;
+			mesh.position.y = 750;
+			mesh.position.x	= 1250;
+			scene.add( mesh );
+			
+			//Front Door
+			geometry = new THREE.PlaneGeometry( 500, 900, 0, 0); // (x, y, widthSegments, heightSegments)
+			material = new THREE.MeshBasicMaterial( { color: 0xff0000, wireframe: true} );
+			
+			mesh = new THREE.Mesh( geometry, material );
+			mesh.position.y = 450;
+			mesh.position.z = -1250;
+			scene.add( mesh );
+			
+			//Back Door
+			geometry = new THREE.PlaneGeometry( 500, 900, 0, 0); // (x, y, widthSegments, heightSegments)
+			material = new THREE.MeshBasicMaterial( { color: 0xff0000, wireframe: true} );
+			
+			mesh = new THREE.Mesh( geometry, material );
+			mesh.position.y = 450;
+			mesh.position.z = 1250;
+			scene.add( mesh );
+			
+			//Left Door
+			geometry = new THREE.PlaneGeometry( 500, 900, 0, 0); // (x, y, widthSegments, heightSegments)
+			material = new THREE.MeshBasicMaterial( { color: 0xff0000, wireframe: true} );
+			
+			mesh = new THREE.Mesh( geometry, material );
+			mesh.rotation.y = 1.57;
+			mesh.position.y = 450;
+			mesh.position.x = -1250;
+			scene.add( mesh );
+			
+			//Right Door
+			geometry = new THREE.PlaneGeometry( 500, 900, 0, 0); // (x, y, widthSegments, heightSegments)
+			material = new THREE.MeshBasicMaterial( { color: 0xff0000, wireframe: true} );
+			
+			mesh = new THREE.Mesh( geometry, material );
+			mesh.rotation.y = 1.57;
+			mesh.position.y = 450;
+			mesh.position.x = 1250;
+			scene.add( mesh );
+		}
+		
+		//PLAYER OBJECTS
+		{
+			//Player Head
+			geometry = new THREE.CubeGeometry( 150, 150, 150);
+			material = new THREE.MeshBasicMaterial( { color: 0xf0f0f0, wireframe: true} );
+			
+			mesh = new THREE.Mesh( geometry, material );
+			mesh.position.y = 575;
+			scene.add( mesh );
+			player[0] = mesh;
+			
+			//Player Body
+			geometry = new THREE.CubeGeometry( 200, 300, 150);
+			material = new THREE.MeshBasicMaterial( { color: 0xf0f0f0, wireframe: true} );
+			
+			mesh = new THREE.Mesh( geometry, material );
+			mesh.position.y = 350;
+			scene.add( mesh );
+			player[1] = mesh;
+			
+			//Player Left Leg
+			geometry = new THREE.CubeGeometry( 90, 200, 150);
+			material = new THREE.MeshBasicMaterial( { color: 0xf0f0f0, wireframe: true} );
+			
+			mesh = new THREE.Mesh( geometry, material );
+			mesh.position.x = -55;
+			mesh.position.y = 100;
+			scene.add( mesh );
+			player[2] = mesh;
+			
+			//Player Right Leg
+			geometry = new THREE.CubeGeometry( 90, 200, 150);
+			material = new THREE.MeshBasicMaterial( { color: 0xf0f0f0, wireframe: true} );
+			
+			mesh = new THREE.Mesh( geometry, material );
+			mesh.position.x = 55;
+			mesh.position.y = 100;
+			scene.add( mesh );
+			player[3] = mesh;
+			
+			//Player Left Arm
+			geometry = new THREE.CubeGeometry( 80, 200, 150);
+			material = new THREE.MeshBasicMaterial( { color: 0xf0f0f0, wireframe: true} );
+			
+			mesh = new THREE.Mesh( geometry, material );
+			mesh.position.x = -140;
+			mesh.position.y = 400;
+			scene.add( mesh );
+			player[4] = mesh;
+			
+			//Player Right Arm
+			geometry = new THREE.CubeGeometry( 80, 200, 150);
+			material = new THREE.MeshBasicMaterial( { color: 0xf0f0f0, wireframe: true} );
+			
+			mesh = new THREE.Mesh( geometry, material );
+			mesh.position.x = 140;
+			mesh.position.y = 400;
+			scene.add( mesh );
+			player[5] = mesh;
+		}
+		
+		//Renderer
+		renderer = new THREE.WebGLRenderer();
+		renderer.setPixelRatio( window.devicePixelRatio );
+		renderer.setSize( window.innerWidth, window.innerHeight );
+		document.body.appendChild( renderer.domElement );
+
+		//Stats
+		stats = new Stats();
+		stats.domElement.style.position = 'absolute';
+		stats.domElement.style.top = '0px';
+		stats.domElement.style.zIndex = 100;
+		container.appendChild( stats.domElement );
+		
+		//Window resize Listener
+		window.addEventListener( 'resize', onWindowResize, false );
+	}		
+	
+	function onWindowResize(){
+		camera.aspect = window.innerWidth / window.innerHeight;
+		camera.updateProjectionMatrix();
+		
+		renderer.setSize( window.innerWidth, window.innerHeight );
+	}
+	
+	function animate(){
+		requestAnimationFrame( animate );
+		
+		player_Move();
+		//cam_Move();
+
+		renderer.render( scene, camera );
+		stats.update();
+	}
+
+</script>
+</body>
+</html>
